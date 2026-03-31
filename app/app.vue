@@ -39,9 +39,7 @@ const roundUpOptions = [
           </div>
 
           <div class="flex items-center gap-2">
-            <UFieldGroup
-              v-if="isWorking"
-            >
+            <UFieldGroup>
               <UTooltip text="Calendar View">
                 <UButton
                   icon="i-lucide-calendar"
@@ -83,7 +81,6 @@ const roundUpOptions = [
             />
             <UTooltip text="Settings">
               <UButton
-                v-if="isWorking"
                 icon="i-lucide-settings"
                 color="neutral"
                 variant="outline"

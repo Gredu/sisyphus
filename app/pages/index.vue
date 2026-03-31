@@ -494,21 +494,7 @@ onUnmounted(() => {
 
 <template>
   <div class="flex-1">
-    <div
-      v-if="!isWorking"
-      class="flex items-center justify-center min-h-[calc(100vh-45px)]"
-    >
-      <UButton
-        label="Start Working"
-        size="xl"
-        @click="startNewEntry"
-      />
-    </div>
-
-    <div
-      v-else
-      class="p-8"
-    >
+    <div class="p-8">
       <div
         v-if="showHotkeys"
         class="rounded-lg border border-default bg-default/50 px-4 py-3 mb-6"
