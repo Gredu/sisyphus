@@ -61,12 +61,28 @@ function calcMinutesFromTimes(start: string, end: string): number {
   return (eh * 60 + em) - (sh * 60 + sm)
 }
 
-function buildBadges(items: { category: string, minutes: number }[]): { icon: string, duration: string }[] {
+interface Badge {
+  icon?: string
+  label?: string
+  duration: string
+}
+
+function buildBadges(items: { category: string, minutes: number }[]): Badge[] {
   let totalMinutes = 0
+  const excluded = new Map<string, number>()
   for (const item of items) {
-    totalMinutes += item.minutes
+    if (item.category.startsWith('!')) {
+      const name = item.category.slice(1)
+      excluded.set(name, (excluded.get(name) || 0) + item.minutes)
+    } else {
+      totalMinutes += item.minutes
+    }
   }
-  return [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes) }]
+  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes) }]
+  for (const [name, minutes] of excluded) {
+    badges.push({ label: name, duration: fmtDuration(minutes) })
+  }
+  return badges
 }
 
 function finalizeForDay(dayEntries: typeof entries.value): FinalizedEntry[] {
@@ -384,6 +400,7 @@ function handleKeydown(event: KeyboardEvent) {
       current[field] = current[field].slice(0, -1)
     }
   } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault()
     current[field] += event.key
   }
 }
@@ -651,9 +668,11 @@ onUnmounted(() => {
               variant="subtle"
             >
               <UIcon
+                v-if="badge.icon"
                 :name="badge.icon"
                 class="size-3.5"
               />
+              <template v-if="badge.label">{{ badge.label }}:</template>
               {{ badge.duration }}
             </UBadge>
           </div>
@@ -725,9 +744,11 @@ onUnmounted(() => {
               variant="subtle"
             >
               <UIcon
+                v-if="badge.icon"
                 :name="badge.icon"
                 class="size-3.5"
               />
+              <template v-if="badge.label">{{ badge.label }}:</template>
               {{ badge.duration }}
             </UBadge>
           </div>
