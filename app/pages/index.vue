@@ -99,7 +99,7 @@ interface Badge {
   primary?: boolean
 }
 
-function buildBadges(date: string, items: { category: string, minutes: number }[]): Badge[] {
+function buildBadges(date: string, items: { category: string, minutes: number }[], thresholdTotal?: number): Badge[] {
   let totalMinutes = 0
   const excluded = new Map<string, number>()
   for (const item of items) {
@@ -110,7 +110,8 @@ function buildBadges(date: string, items: { category: string, minutes: number }[
       totalMinutes += item.minutes
     }
   }
-  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes), primary: totalMinutes >= getThreshold(date) }]
+  const compareTotal = thresholdTotal ?? totalMinutes
+  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes), primary: compareTotal >= getThreshold(date) }]
   for (const [name, minutes] of excluded) {
     badges.push({ label: name, duration: fmtDuration(minutes) })
   }
@@ -167,11 +168,35 @@ function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Ba
 function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
   const nowTime = `${clockHours.value}:${clockMinutes.value}`
   const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
+  const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
+  const roundUpVal = (m: number, interval: number) => Math.ceil(m / interval) * interval
+
+  // Compute rounded total for threshold comparison
+  let roundedTotal = 0
+  if (!collapse.value) {
+    for (const e of includable) {
+      if (e.category.startsWith('!')) continue
+      let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
+      if (roundInterval > 0) mins = roundUpVal(mins, roundInterval)
+      roundedTotal += mins
+    }
+  } else {
+    const grouped = new Map<string, number>()
+    for (const e of includable) {
+      if (e.category.startsWith('!')) continue
+      let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
+      if (roundInterval > 0 && roundOrder.value === 'before') mins = roundUpVal(mins, roundInterval)
+      grouped.set(e.category, (grouped.get(e.category) || 0) + mins)
+    }
+    for (const [, mins] of grouped) {
+      roundedTotal += roundInterval > 0 && roundOrder.value === 'after' ? roundUpVal(mins, roundInterval) : mins
+    }
+  }
 
   return buildBadges(date, includable.map((e) => {
     const minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
     return { category: e.category, minutes }
-  }))
+  }), roundedTotal)
 }
 
 // Calendar view
