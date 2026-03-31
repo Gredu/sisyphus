@@ -424,16 +424,18 @@ function formatFinalizedText(entry: FinalizedEntry): string {
   return `${entry.duration} ${entry.category}: ${entry.content}`
 }
 
-function copyAllEntries() {
-  if (isFinalized.value) {
-    const text = finalizedEntries.value.map(formatFinalizedText).join('\n')
-    navigator.clipboard.writeText(text)
-  } else {
-    const completed = entries.value.filter(e => e.endTime)
-    const text = completed.map(formatRecordText).join('\n')
-    navigator.clipboard.writeText(text)
-  }
-  showCopied('all')
+function copyDayRecords(group: DayGroup) {
+  const completed = group.entries.filter(e => e.endTime)
+  const text = completed.map(formatRecordText).join('\n')
+  navigator.clipboard.writeText(text)
+  showCopied(`day-${group.date}`)
+}
+
+function copyDaySummary(group: DayGroup) {
+  const finalized = finalizeForDay(group.entries)
+  const text = finalized.map(formatFinalizedText).join('\n')
+  navigator.clipboard.writeText(text)
+  showCopied(`day-${group.date}`)
 }
 
 function copyRecord(entry: TimeEntry, index: number) {
@@ -628,13 +630,13 @@ onUnmounted(() => {
             <h1 class="text-2xl font-bold">
               {{ group.label }}
             </h1>
-            <UPopover :open="copiedId === 'all'">
+            <UPopover :open="copiedId === `day-${group.date}`">
               <UButton
                 icon="i-lucide-copy"
                 color="neutral"
                 variant="ghost"
                 size="xs"
-                @click="copyAllEntries"
+                @click="copyDaySummary(group)"
               />
               <template #content>
                 <div class="px-2 py-1 text-xs">
@@ -702,13 +704,13 @@ onUnmounted(() => {
             <h1 class="text-2xl font-bold">
               {{ group.label }}
             </h1>
-            <UPopover :open="copiedId === 'all'">
+            <UPopover :open="copiedId === `day-${group.date}`">
               <UButton
                 icon="i-lucide-copy"
                 color="neutral"
                 variant="ghost"
                 size="xs"
-                @click="copyAllEntries"
+                @click="copyDayRecords(group)"
               />
               <template #content>
                 <div class="px-2 py-1 text-xs">
