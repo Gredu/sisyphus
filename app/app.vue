@@ -1,5 +1,22 @@
 <script setup lang="ts">
-const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, continueWorking, startOver } = useWorkEntries()
+
+const defaultThresholdHours = computed({
+  get: () => Math.floor(defaultPrimaryThreshold.value / 60).toString().padStart(2, '0'),
+  set: (v: string) => { defaultPrimaryThreshold.value = Number(v) * 60 + (defaultPrimaryThreshold.value % 60) }
+})
+const defaultThresholdMinutes = computed({
+  get: () => (defaultPrimaryThreshold.value % 60).toString().padStart(2, '0'),
+  set: (v: string) => { defaultPrimaryThreshold.value = Math.floor(defaultPrimaryThreshold.value / 60) * 60 + Number(v) }
+})
+const thresholdHourOptions = Array.from({ length: 24 }, (_, i) => ({
+  label: i.toString().padStart(2, '0'),
+  value: i.toString().padStart(2, '0')
+}))
+const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
+  label: i.toString().padStart(2, '0'),
+  value: i.toString().padStart(2, '0')
+}))
 
 const wouldCreateNewDate = computed(() => {
   if (!isStopped.value || entries.value.length === 0) return false
@@ -123,6 +140,32 @@ const roundUpOptions = [
                 </p>
               </div>
               <USwitch v-model="showHotkeys" />
+            </div>
+
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex flex-col gap-1">
+                <p class="text-sm font-semibold">
+                  Daily hours target
+                </p>
+                <p class="text-xs text-muted leading-relaxed">
+                  Default threshold for highlighting when a day's total reaches this amount.
+                </p>
+              </div>
+              <div class="flex items-center gap-1">
+                <USelect
+                  v-model="defaultThresholdHours"
+                  :items="thresholdHourOptions"
+                  class="w-20"
+                  size="sm"
+                />
+                <span class="text-sm font-mono font-bold">:</span>
+                <USelect
+                  v-model="defaultThresholdMinutes"
+                  :items="thresholdMinuteOptions"
+                  class="w-20"
+                  size="sm"
+                />
+              </div>
             </div>
           </div>
 

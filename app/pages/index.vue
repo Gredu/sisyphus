@@ -2,9 +2,40 @@
 import type { FinalizedEntry } from '~/composables/useWorkEntries'
 import { VueDraggable } from 'vue-draggable-plus'
 
-const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, getActiveEntry, stopWorking, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, getActiveEntry, stopWorking, continueWorking, startOver } = useWorkEntries()
 type TimeEntry = typeof entries.value[number]
 const selectedSuggestionIndex = ref(0)
+
+const primaryThresholds = ref<Record<string, number>>({})
+
+function getThreshold(date: string): number {
+  return primaryThresholds.value[date] ?? defaultPrimaryThreshold.value
+}
+
+function getThresholdHours(date: string): string {
+  return Math.floor(getThreshold(date) / 60).toString().padStart(2, '0')
+}
+
+function getThresholdMinutes(date: string): string {
+  return (getThreshold(date) % 60).toString().padStart(2, '0')
+}
+
+function setThresholdHours(date: string, hours: string) {
+  primaryThresholds.value[date] = Number(hours) * 60 + (getThreshold(date) % 60)
+}
+
+function setThresholdMinutes(date: string, minutes: string) {
+  primaryThresholds.value[date] = Math.floor(getThreshold(date) / 60) * 60 + Number(minutes)
+}
+
+const thresholdHourOptions = Array.from({ length: 24 }, (_, i) => ({
+  label: i.toString().padStart(2, '0'),
+  value: i.toString().padStart(2, '0')
+}))
+const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
+  label: i.toString().padStart(2, '0'),
+  value: i.toString().padStart(2, '0')
+}))
 
 function displayDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -65,9 +96,10 @@ interface Badge {
   icon?: string
   label?: string
   duration: string
+  primary?: boolean
 }
 
-function buildBadges(items: { category: string, minutes: number }[]): Badge[] {
+function buildBadges(date: string, items: { category: string, minutes: number }[]): Badge[] {
   let totalMinutes = 0
   const excluded = new Map<string, number>()
   for (const item of items) {
@@ -78,7 +110,7 @@ function buildBadges(items: { category: string, minutes: number }[]): Badge[] {
       totalMinutes += item.minutes
     }
   }
-  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes) }]
+  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes), primary: totalMinutes >= getThreshold(date) }]
   for (const [name, minutes] of excluded) {
     badges.push({ label: name, duration: fmtDuration(minutes) })
   }
@@ -124,19 +156,19 @@ function finalizeForDay(dayEntries: typeof entries.value): FinalizedEntry[] {
   })
 }
 
-function summaryBadgesForDay(dayEntries: typeof entries.value): { icon: string, duration: string }[] {
+function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Badge[] {
   const finalized = finalizeForDay(dayEntries)
-  return buildBadges(finalized.map((e) => {
+  return buildBadges(date, finalized.map((e) => {
     const [h, m] = e.duration.split(':').map(Number)
     return { category: e.category, minutes: (h ?? 0) * 60 + (m ?? 0) }
   }))
 }
 
-function recordBadges(dayEntries: typeof entries.value): { icon: string, duration: string }[] {
+function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
   const nowTime = `${clockHours.value}:${clockMinutes.value}`
   const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
 
-  return buildBadges(includable.map((e) => {
+  return buildBadges(date, includable.map((e) => {
     const minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
     return { category: e.category, minutes }
   }))
@@ -176,6 +208,7 @@ interface CalendarDay {
   day: number
   isCurrentMonth: boolean
   total: string | null
+  totalPrimary: boolean
   categories: { name: string, duration: string }[]
 }
 
@@ -201,7 +234,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
   // Fill leading days from previous month
   for (let i = startDow - 1; i >= 0; i--) {
     const d = new Date(year, month, -i)
-    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, categories: [] })
+    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
   }
 
   // Current month days
@@ -209,7 +242,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
     const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
     const dayEntries = byDate.get(dateStr)
     if (!dayEntries || dayEntries.length === 0) {
-      days.push({ date: dateStr, day: d, isCurrentMonth: true, total: null, categories: [] })
+      days.push({ date: dateStr, day: d, isCurrentMonth: true, total: null, totalPrimary: false, categories: [] })
       continue
     }
 
@@ -226,7 +259,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
       for (const e of includable) {
         let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
         if (roundInterval > 0) mins = roundUp(mins, roundInterval)
-        totalMinutes += mins
+        if (!e.category.startsWith('!')) totalMinutes += mins
         catMap.set(e.category, (catMap.get(e.category) || 0) + mins)
       }
       categories = [...catMap.entries()].map(([name, mins]) => ({ name, duration: fmtDuration(mins) }))
@@ -243,8 +276,8 @@ const calendarDays = computed<CalendarDay[]>(() => {
           grouped.set(cat, roundUp(mins, roundInterval))
         }
       }
-      for (const mins of grouped.values()) {
-        totalMinutes += mins
+      for (const [cat, mins] of grouped) {
+        if (!cat.startsWith('!')) totalMinutes += mins
       }
       categories = [...grouped.entries()].map(([name, mins]) => ({ name, duration: fmtDuration(mins) }))
     }
@@ -254,6 +287,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
       day: d,
       isCurrentMonth: true,
       total: totalMinutes > 0 ? fmtDuration(totalMinutes) : null,
+      totalPrimary: totalMinutes >= getThreshold(dateStr),
       categories
     })
   }
@@ -262,7 +296,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
   const remaining = 42 - days.length
   for (let i = 1; i <= remaining; i++) {
     const d = new Date(year, month + 1, i)
-    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, categories: [] })
+    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
   }
 
   return days
@@ -469,6 +503,10 @@ watch(entries, () => {
   localStorage.setItem('sisyphus-entries', JSON.stringify(entries.value))
 }, { deep: true })
 
+watch(primaryThresholds, (v) => {
+  localStorage.setItem('sisyphus-primary-thresholds', JSON.stringify(v))
+}, { deep: true })
+
 // Drag-to-reorder
 function onDragEnd(event: { oldIndex?: number, newIndex?: number, from: HTMLElement, item: HTMLElement }, groupDate: string) {
   if (event.oldIndex === undefined || event.newIndex === undefined) return
@@ -496,6 +534,8 @@ function onDragEnd(event: { oldIndex?: number, newIndex?: number, from: HTMLElem
 
 onMounted(() => {
   loadEntries()
+  const storedThresholds = localStorage.getItem('sisyphus-primary-thresholds')
+  if (storedThresholds) primaryThresholds.value = JSON.parse(storedThresholds)
   window.addEventListener('keydown', handleKeydown)
   startNowTimer()
   clockInterval = setInterval(() => {
@@ -613,18 +653,41 @@ onUnmounted(() => {
             >
               {{ day.day }}
             </div>
-            <UBadge
-              v-if="day.total"
-              color="neutral"
-              variant="subtle"
-              class="text-[10px] mb-1"
-            >
-              <UIcon
-                name="i-lucide-sigma"
-                class="size-3"
-              />
-              {{ day.total }}
-            </UBadge>
+            <UPopover v-if="day.total">
+              <UBadge
+                :color="day.totalPrimary ? 'primary' : 'neutral'"
+                variant="subtle"
+                class="text-[10px] mb-1 cursor-pointer"
+              >
+                <UIcon
+                  name="i-lucide-sigma"
+                  class="size-3"
+                />
+                {{ day.total }}
+              </UBadge>
+              <template #content>
+                <div
+                  class="flex items-center gap-1 p-2"
+                  @keydown.stop
+                >
+                  <USelect
+                    :model-value="getThresholdHours(day.date)"
+                    :items="thresholdHourOptions"
+                    class="w-20"
+                    size="sm"
+                    @update:model-value="setThresholdHours(day.date, $event)"
+                  />
+                  <span class="text-sm font-mono font-bold">:</span>
+                  <USelect
+                    :model-value="getThresholdMinutes(day.date)"
+                    :items="thresholdMinuteOptions"
+                    class="w-20"
+                    size="sm"
+                    @update:model-value="setThresholdMinutes(day.date, $event)"
+                  />
+                </div>
+              </template>
+            </UPopover>
             <div
               v-for="cat in day.categories"
               :key="cat.name"
@@ -661,20 +724,54 @@ onUnmounted(() => {
                 </div>
               </template>
             </UPopover>
-            <UBadge
-              v-for="(badge, i) in summaryBadgesForDay(group.entries)"
+            <template
+              v-for="(badge, i) in summaryBadgesForDay(group.date, group.entries)"
               :key="i"
-              color="neutral"
-              variant="subtle"
             >
-              <UIcon
-                v-if="badge.icon"
-                :name="badge.icon"
-                class="size-3.5"
-              />
-              <template v-if="badge.label">{{ badge.label }}:</template>
-              {{ badge.duration }}
-            </UBadge>
+              <UPopover v-if="badge.icon">
+                <UBadge
+                  :color="badge.primary ? 'primary' : 'neutral'"
+                  variant="subtle"
+                  class="cursor-pointer"
+                >
+                  <UIcon
+                    :name="badge.icon"
+                    class="size-3.5"
+                  />
+                  {{ badge.duration }}
+                </UBadge>
+                <template #content>
+                  <div
+                    class="flex items-center gap-1 p-2"
+                    @keydown.stop
+                  >
+                    <USelect
+                      :model-value="getThresholdHours(group.date)"
+                      :items="thresholdHourOptions"
+                      class="w-20"
+                      size="sm"
+                      @update:model-value="setThresholdHours(group.date, $event)"
+                    />
+                    <span class="text-sm font-mono font-bold">:</span>
+                    <USelect
+                      :model-value="getThresholdMinutes(group.date)"
+                      :items="thresholdMinuteOptions"
+                      class="w-20"
+                      size="sm"
+                      @update:model-value="setThresholdMinutes(group.date, $event)"
+                    />
+                  </div>
+                </template>
+              </UPopover>
+              <UBadge
+                v-else
+                color="neutral"
+                variant="subtle"
+              >
+                <template v-if="badge.label">{{ badge.label }}:</template>
+                {{ badge.duration }}
+              </UBadge>
+            </template>
           </div>
           <div class="space-y-2">
             <div
@@ -737,20 +834,54 @@ onUnmounted(() => {
                 </div>
               </template>
             </UPopover>
-            <UBadge
-              v-for="(badge, i) in recordBadges(group.entries)"
+            <template
+              v-for="(badge, i) in recordBadges(group.date, group.entries)"
               :key="i"
-              color="neutral"
-              variant="subtle"
             >
-              <UIcon
-                v-if="badge.icon"
-                :name="badge.icon"
-                class="size-3.5"
-              />
-              <template v-if="badge.label">{{ badge.label }}:</template>
-              {{ badge.duration }}
-            </UBadge>
+              <UPopover v-if="badge.icon">
+                <UBadge
+                  :color="badge.primary ? 'primary' : 'neutral'"
+                  variant="subtle"
+                  class="cursor-pointer"
+                >
+                  <UIcon
+                    :name="badge.icon"
+                    class="size-3.5"
+                  />
+                  {{ badge.duration }}
+                </UBadge>
+                <template #content>
+                  <div
+                    class="flex items-center gap-1 p-2"
+                    @keydown.stop
+                  >
+                    <USelect
+                      :model-value="getThresholdHours(group.date)"
+                      :items="thresholdHourOptions"
+                      class="w-20"
+                      size="sm"
+                      @update:model-value="setThresholdHours(group.date, $event)"
+                    />
+                    <span class="text-sm font-mono font-bold">:</span>
+                    <USelect
+                      :model-value="getThresholdMinutes(group.date)"
+                      :items="thresholdMinuteOptions"
+                      class="w-20"
+                      size="sm"
+                      @update:model-value="setThresholdMinutes(group.date, $event)"
+                    />
+                  </div>
+                </template>
+              </UPopover>
+              <UBadge
+                v-else
+                color="neutral"
+                variant="subtle"
+              >
+                <template v-if="badge.label">{{ badge.label }}:</template>
+                {{ badge.duration }}
+              </UBadge>
+            </template>
           </div>
 
           <VueDraggable

@@ -23,6 +23,7 @@ const collapse = ref(true)
 const joinCharacter = ref(';')
 const roundOrder = ref<'after' | 'before'>('after')
 const showHotkeys = ref(false)
+const defaultPrimaryThreshold = ref(450)
 const editingField = ref<'category' | 'content'>('category')
 const editingIndex = ref<number | null>(null)
 
@@ -114,7 +115,13 @@ function loadEntries() {
     isWorking.value = entries.value.length > 0
     isStopped.value = isWorking.value && entries.value.every(e => e.endTime)
   }
+  const storedThreshold = localStorage.getItem('sisyphus-default-threshold')
+  if (storedThreshold) defaultPrimaryThreshold.value = Number(storedThreshold)
 }
+
+watch(defaultPrimaryThreshold, (v) => {
+  localStorage.setItem('sisyphus-default-threshold', String(v))
+})
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
@@ -169,6 +176,7 @@ export function useWorkEntries() {
     roundOrder,
     finalizedEntries,
     showHotkeys,
+    defaultPrimaryThreshold,
     editingField,
     editingIndex,
     startNowTimer,
