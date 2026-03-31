@@ -19,7 +19,8 @@ const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
 }))
 
 const wouldCreateNewDate = computed(() => {
-  if (!isStopped.value || entries.value.length === 0) return false
+  if (entries.value.length === 0) return !isWorking.value
+  if (!isStopped.value) return false
   const today = new Date().toISOString().split('T')[0]
   const lastDate = entries.value[entries.value.length - 1]?.date
   return lastDate !== today
