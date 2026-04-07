@@ -1,6 +1,17 @@
 <script setup lang="ts">
 const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, continueWorking, startOver } = useWorkEntries()
 
+const colorMode = useColorMode()
+const colorModeOptions = [
+  { label: 'System', value: 'system' },
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' }
+]
+const colorModePreference = computed({
+  get: () => colorMode.preference,
+  set: (v: string) => { colorMode.preference = v }
+})
+
 const defaultThresholdHours = computed({
   get: () => Math.floor(defaultPrimaryThreshold.value / 60).toString().padStart(2, '0'),
   set: (v: string) => { defaultPrimaryThreshold.value = Number(v) * 60 + (defaultPrimaryThreshold.value % 60) }
@@ -130,6 +141,22 @@ const roundUpOptions = [
               />
               General
             </h3>
+
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex flex-col gap-1">
+                <p class="text-sm font-semibold">
+                  Theme
+                </p>
+                <p class="text-xs text-muted leading-relaxed">
+                  Choose between light, dark, or system preference.
+                </p>
+              </div>
+              <USelect
+                v-model="colorModePreference"
+                :items="colorModeOptions"
+                class="w-28"
+              />
+            </div>
 
             <div class="flex items-start justify-between gap-4">
               <div class="flex flex-col gap-1">
