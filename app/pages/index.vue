@@ -90,8 +90,8 @@ function fmtDuration(minutes: number): string {
 }
 
 function calcMinutesFromTimes(start: string, end: string): number {
-  const [sh, sm] = start.split(':').map(Number)
-  const [eh, em] = end.split(':').map(Number)
+  const [sh = 0, sm = 0] = start.split(':').map(Number)
+  const [eh = 0, em = 0] = end.split(':').map(Number)
   return (eh * 60 + em) - (sh * 60 + sm)
 }
 
@@ -338,7 +338,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
 })
 
 function fmt(d: Date): string {
-  return d.toISOString().split('T')[0]
+  return d.toISOString().split('T')[0]!
 }
 
 const weekDayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -367,14 +367,14 @@ function acceptSuggestion() {
   const current = getActiveEntry()
   if (!current || !current.category) return
   if (suggestions.value.length > 0) {
-    current.category = suggestions.value[selectedSuggestionIndex.value]
+    current.category = suggestions.value[selectedSuggestionIndex.value]!
   }
   selectedSuggestionIndex.value = 0
   editingField.value = 'content'
 }
 
 function currentDateStr(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().split('T')[0]!
 }
 
 function startNewEntry() {
@@ -965,7 +965,7 @@ onUnmounted(() => {
                   >{{ entry.category }}<span
                      v-if="suggestions.length > 0"
                      class="text-muted/40"
-                   >{{ suggestions[selectedSuggestionIndex].slice(entry.category.length) }}</span><span class="animate-pulse text-primary">▎</span>
+                   >{{ suggestions[selectedSuggestionIndex]?.slice(entry.category.length) }}</span><span class="animate-pulse text-primary">▎</span>
                     <div
                       v-if="suggestions.length > 1"
                       class="absolute left-[8ch] top-full z-10 mt-1 rounded-lg border border-default bg-default shadow-lg py-1"

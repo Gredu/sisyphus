@@ -8,7 +8,7 @@ export interface TimeEntry {
 }
 
 function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
+  return date.toISOString().split('T')[0]!
 }
 
 const STORAGE_KEY = 'sisyphus-entries'
@@ -35,8 +35,8 @@ export interface FinalizedEntry {
 }
 
 function calcMinutes(start: string, end: string): number {
-  const [sh, sm] = start.split(':').map(Number)
-  const [eh, em] = end.split(':').map(Number)
+  const [sh = 0, sm = 0] = start.split(':').map(Number)
+  const [eh = 0, em = 0] = end.split(':').map(Number)
   return (eh * 60 + em) - (sh * 60 + sm)
 }
 
