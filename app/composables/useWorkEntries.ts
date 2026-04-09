@@ -26,7 +26,7 @@ const showHotkeys = ref(false)
 const defaultPrimaryThreshold = ref(450)
 const editingField = ref<'category' | 'content'>('category')
 const editingIndex = ref<number | null>(null)
-
+const timeFormat = ref<'hhmm' | 'decimal'>('decimal')
 
 export interface FinalizedEntry {
   duration: string
@@ -45,6 +45,9 @@ function roundUp(minutes: number, interval: number): number {
 }
 
 function formatDuration(minutes: number): string {
+  if (timeFormat.value === 'decimal') {
+    return (minutes / 60).toFixed(2)
+  }
   const h = Math.floor(minutes / 60).toString().padStart(2, '0')
   const m = (minutes % 60).toString().padStart(2, '0')
   return `${h}:${m}`
@@ -179,6 +182,7 @@ export function useWorkEntries() {
     defaultPrimaryThreshold,
     editingField,
     editingIndex,
+    timeFormat,
     startNowTimer,
     stopNowTimer,
     getActiveEntry,

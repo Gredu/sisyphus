@@ -2,7 +2,7 @@
 import type { FinalizedEntry } from '~/composables/useWorkEntries'
 import { VueDraggable } from 'vue-draggable-plus'
 
-const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, getActiveEntry, stopWorking, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, timeFormat, getActiveEntry, stopWorking, continueWorking, startOver } = useWorkEntries()
 type TimeEntry = typeof entries.value[number]
 const selectedSuggestionIndex = ref(0)
 
@@ -81,6 +81,9 @@ function formatTime(date: Date): string {
 }
 
 function fmtDuration(minutes: number): string {
+  if (timeFormat.value === 'decimal') {
+    return (minutes / 60).toFixed(2)
+  }
   const hh = Math.floor(minutes / 60).toString().padStart(2, '0')
   const mm = (minutes % 60).toString().padStart(2, '0')
   return `${hh}:${mm}`
@@ -157,11 +160,18 @@ function finalizeForDay(dayEntries: typeof entries.value): FinalizedEntry[] {
   })
 }
 
+function parseDurationToMinutes(duration: string): number {
+  if (duration.includes(':')) {
+    const [h, m] = duration.split(':').map(Number)
+    return (h ?? 0) * 60 + (m ?? 0)
+  }
+  return Math.round(Number(duration) * 60)
+}
+
 function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Badge[] {
   const finalized = finalizeForDay(dayEntries)
   return buildBadges(date, finalized.map((e) => {
-    const [h, m] = e.duration.split(':').map(Number)
-    return { category: e.category, minutes: (h ?? 0) * 60 + (m ?? 0) }
+    return { category: e.category, minutes: parseDurationToMinutes(e.duration) }
   }))
 }
 

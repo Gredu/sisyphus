@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, timeFormat, continueWorking, startOver } = useWorkEntries()
 
 const colorMode = useColorMode()
 const colorModeOptions = [
@@ -39,6 +39,11 @@ const wouldCreateNewDate = computed(() => {
 
 const configOpen = ref(false)
 const confirmOpen = ref(false)
+
+const timeFormatOptions = [
+  { label: 'Decimal (2.50)', value: 'decimal' },
+  { label: 'HH:MM (02:30)', value: 'hhmm' }
+]
 
 const roundOrderOptions = [
   { label: 'Round after grouping', value: 'after' },
@@ -208,6 +213,35 @@ const roundUpOptions = [
             </h3>
 
             <div class="flex flex-col gap-10">
+              <!-- Time Format -->
+              <section class="flex flex-col gap-4">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+                  <UIcon
+                    name="i-lucide-timer"
+                    class="size-4 text-primary"
+                  />
+                  Time Format
+                </div>
+
+                <div class="flex flex-col gap-2 pl-5 border-l border-default/50">
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="flex flex-col gap-1">
+                      <p class="text-sm font-semibold">
+                        Duration format
+                      </p>
+                      <p class="text-xs text-muted leading-relaxed">
+                        How durations are displayed and copied.
+                      </p>
+                    </div>
+                    <USelect
+                      v-model="timeFormat"
+                      :items="timeFormatOptions"
+                      class="w-44"
+                    />
+                  </div>
+                </div>
+              </section>
+
               <!-- Rounding Section -->
               <section class="flex flex-col gap-4">
                 <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted">
