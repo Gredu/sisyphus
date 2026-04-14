@@ -573,6 +573,27 @@ function onDragEnd(event: { oldIndex?: number, newIndex?: number, from: HTMLElem
   entries.value.splice(newFlatIdx, 0, moved)
 }
 
+const defaultTitle = 'Sisyphus'
+watchEffect(() => {
+  const active = getActiveEntry()
+  if (!active) {
+    document.title = defaultTitle
+    return
+  }
+  // depend on currentTime so this re-runs every tick
+  const now = currentTime.value
+  const nowTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+  const todayEntries = entries.value.filter(e => e.date === active.date && (e.endTime || e.category || e.content))
+  let totalMinutes = 0
+  for (const e of todayEntries) {
+    if (e.category.startsWith('!')) continue
+    totalMinutes += calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
+  }
+  const h = Math.floor(Math.max(0, totalMinutes) / 60).toString().padStart(2, '0')
+  const m = (Math.max(0, totalMinutes) % 60).toString().padStart(2, '0')
+  document.title = `${h}:${m} — ${defaultTitle}`
+})
+
 onMounted(() => {
   loadEntries()
   const storedThresholds = localStorage.getItem('sisyphus-primary-thresholds')
