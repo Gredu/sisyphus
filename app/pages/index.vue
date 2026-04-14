@@ -393,36 +393,41 @@ function startNewEntry() {
     editingField.value = 'category'
   }
   selectedSuggestionIndex.value = 0
+  focusActiveField()
 }
 
 function isActiveEntry(entry: TimeEntry): boolean {
   return !entry.endTime && editingIndex.value === null && !isStopped.value
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (editingIndex.value !== null) return
-  if (isStopped.value || isFinalized.value) return
+const activeCategoryRef = ref<HTMLInputElement | null>(null)
+const activeContentRef = ref<HTMLInputElement | null>(null)
+
+function focusActiveField() {
+  nextTick(() => {
+    if (editingField.value === 'category') {
+      activeCategoryRef.value?.focus()
+    } else {
+      activeContentRef.value?.focus()
+    }
+  })
+}
+
+watch(editingField, () => focusActiveField())
+
+function handleActiveCategoryKeydown(event: KeyboardEvent) {
+  const current = getActiveEntry()
+  if (!current) return
 
   if (event.key === 'Enter') {
     event.preventDefault()
-    if (isWorking.value && editingField.value === 'category') {
-      const current = getActiveEntry()
-      if (!current?.category) return
-      editingField.value = 'content'
-      selectedSuggestionIndex.value = 0
-      return
-    }
-    if (isWorking.value && editingField.value === 'content') {
-      const current = getActiveEntry()
-      if (!current?.category) return
-    }
-    startNewEntry()
+    if (!current.category) return
+    editingField.value = 'content'
+    selectedSuggestionIndex.value = 0
     return
   }
 
-  if (!isWorking.value) return
-
-  if (event.key === 'Tab' && editingField.value === 'category') {
+  if (event.key === 'Tab') {
     event.preventDefault()
     if (suggestions.value.length > 1) {
       if (event.shiftKey) {
@@ -436,30 +441,45 @@ function handleKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key === 'Backspace' && current.category.length === 0) {
+    event.preventDefault()
+    const todayEntries = entries.value.filter(e => e.date === current.date)
+    if (todayEntries.length <= 1) return
+    const activeIdx = entries.value.indexOf(current)
+    if (activeIdx !== -1) entries.value.splice(activeIdx, 1)
+    const previous = entries.value.filter(e => e.date === current.date).pop()
+    if (previous) {
+      previous.endTime = null
+      editingField.value = previous.content ? 'content' : 'category'
+      focusActiveField()
+    }
+  }
+}
+
+function handleActiveContentKeydown(event: KeyboardEvent) {
   const current = getActiveEntry()
   if (!current) return
 
-  const field = editingField.value
-
-  if (event.key === 'Backspace') {
-    if (current[field].length === 0 && field === 'content') {
-      editingField.value = 'category'
-    } else if (current[field].length === 0 && field === 'category' && entries.value.length > 1) {
-      const todayEntries = entries.value.filter(e => e.date === current.date)
-      if (todayEntries.length <= 1) return
-      const activeIdx = entries.value.indexOf(current)
-      if (activeIdx !== -1) entries.value.splice(activeIdx, 1)
-      const previous = entries.value.filter(e => e.date === current.date).pop()
-      if (previous) {
-        previous.endTime = null
-        editingField.value = previous.content ? 'content' : previous.category ? 'content' : 'category'
-      }
-    } else {
-      current[field] = current[field].slice(0, -1)
-    }
-  } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+  if (event.key === 'Enter') {
     event.preventDefault()
-    current[field] += event.key
+    if (!current.category) return
+    startNewEntry()
+    return
+  }
+
+  if (event.key === 'Backspace' && current.content.length === 0) {
+    event.preventDefault()
+    editingField.value = 'category'
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (editingIndex.value !== null) return
+  if (isStopped.value || isFinalized.value) return
+  // Only handle Enter when no active input is focused (e.g. starting first entry)
+  if (event.key === 'Enter' && !isWorking.value) {
+    event.preventDefault()
+    startNewEntry()
   }
 }
 
@@ -591,6 +611,7 @@ onMounted(() => {
     currentTime.value = new Date()
     colonVisible.value = !colonVisible.value
   }, 500)
+  if (getActiveEntry()) focusActiveField()
 })
 
 onUnmounted(() => {
@@ -969,18 +990,23 @@ onUnmounted(() => {
                 class="h-6"
               />
               <div class="flex flex-col flex-1">
-                <!-- Category: in-progress keyboard input -->
                 <template v-if="isActiveEntry(entry)">
-                  <span
-                    v-if="editingField === 'category'"
-                    class="font-semibold text-sm flex items-center gap-1"
-                  >{{ entry.category }}<span
-                     v-if="suggestions.length > 0"
-                     class="text-muted/40"
-                   >{{ suggestions[selectedSuggestionIndex]?.slice(entry.category.length) }}</span><span class="animate-pulse text-primary">▎</span>
+                  <div class="relative flex items-center gap-1">
+                    <input
+                      ref="activeCategoryRef"
+                      v-model="entry.category"
+                      class="bg-transparent outline-none font-semibold text-sm w-full"
+                      placeholder="Category"
+                      @keydown="handleActiveCategoryKeydown"
+                      @focus="editingField = 'category'"
+                    />
+                    <span
+                      v-if="editingField === 'category' && suggestions.length > 0"
+                      class="absolute left-0 pointer-events-none font-semibold text-sm text-muted/40"
+                    >{{ entry.category }}{{ suggestions[selectedSuggestionIndex]?.slice(entry.category.length) }}</span>
                     <div
-                      v-if="suggestions.length > 1"
-                      class="absolute left-[8ch] top-full z-10 mt-1 rounded-lg border border-default bg-default shadow-lg py-1"
+                      v-if="editingField === 'category' && suggestions.length > 1"
+                      class="absolute left-0 top-full z-10 mt-1 rounded-lg border border-default bg-default shadow-lg py-1"
                     >
                       <div
                         v-for="(s, i) in suggestions"
@@ -991,21 +1017,16 @@ onUnmounted(() => {
                         {{ s }}
                       </div>
                     </div>
-                  </span>
-                  <span
-                    v-else-if="entry.category"
-                    class="font-semibold text-sm flex items-center gap-1"
-                  >{{ entry.category }}</span>
-                  <span
-                    v-if="editingField === 'content'"
-                    class="text-sm text-muted"
-                  >{{ entry.content }}<span class="animate-pulse text-primary">▎</span></span>
-                  <span
-                    v-else-if="entry.content"
-                    class="text-sm text-muted"
-                  >{{ entry.content }}</span>
+                  </div>
+                  <input
+                    ref="activeContentRef"
+                    v-model="entry.content"
+                    class="bg-transparent outline-none text-sm text-muted w-full"
+                    placeholder="Content"
+                    @keydown="handleActiveContentKeydown"
+                    @focus="editingField = 'content'"
+                  />
                 </template>
-                <!-- Completed entries: always-visible inputs -->
                 <template v-else>
                   <div class="flex items-center gap-1">
                     <UInput
