@@ -458,9 +458,11 @@ function handleKeydown(event: KeyboardEvent) {
     if (current[field].length === 0 && field === 'content') {
       editingField.value = 'category'
     } else if (current[field].length === 0 && field === 'category' && entries.value.length > 1) {
+      const todayEntries = entries.value.filter(e => e.date === current.date)
+      if (todayEntries.length <= 1) return
       const activeIdx = entries.value.indexOf(current)
       if (activeIdx !== -1) entries.value.splice(activeIdx, 1)
-      const previous = entries.value[entries.value.length - 1]
+      const previous = entries.value.filter(e => e.date === current.date).pop()
       if (previous) {
         previous.endTime = null
         editingField.value = previous.content ? 'content' : previous.category ? 'content' : 'category'
@@ -477,15 +479,19 @@ function handleKeydown(event: KeyboardEvent) {
 function deleteEntry(entry: TimeEntry) {
   const idx = entries.value.indexOf(entry)
   if (idx === -1) return
-  if (entries.value.length === 1) {
+  const wasActive = !entry.endTime
+  if (wasActive) {
+    const todayEntries = entries.value.filter(e => e.date === entry.date)
+    if (todayEntries.length <= 1) return
+  }
+  entries.value.splice(idx, 1)
+  if (entries.value.length === 0) {
     startOver()
     return
   }
-  const wasActive = !entry.endTime
-  entries.value.splice(idx, 1)
-  if (wasActive && entries.value.length > 0) {
-    const last = entries.value[entries.value.length - 1]
-    if (last) last.endTime = null
+  if (wasActive) {
+    const sameDayLast = entries.value.filter(e => e.date === entry.date).pop()
+    if (sameDayLast) sameDayLast.endTime = null
   }
 }
 
