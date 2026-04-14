@@ -408,10 +408,6 @@ function handleKeydown(event: KeyboardEvent) {
     if (isWorking.value && editingField.value === 'category') {
       const current = getActiveEntry()
       if (!current?.category) return
-      if (suggestions.value.length > 0) {
-        acceptSuggestion()
-        return
-      }
       editingField.value = 'content'
       selectedSuggestionIndex.value = 0
       return
@@ -437,15 +433,6 @@ function handleKeydown(event: KeyboardEvent) {
     } else {
       acceptSuggestion()
     }
-    return
-  }
-
-  if (event.key === ' ' && editingField.value === 'category') {
-    event.preventDefault()
-    const current = getActiveEntry()
-    if (!current?.category) return
-    editingField.value = 'content'
-    selectedSuggestionIndex.value = 0
     return
   }
 
@@ -636,16 +623,14 @@ onUnmounted(() => {
           </template>
           <template v-else-if="editingField === 'category'">
             <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">Enter</kbd>
-            <span class="text-muted">Accept category and move to content</span>
+            <span class="text-muted">Accept category as-is and move to content</span>
             <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">Tab</kbd>
             <span class="text-muted">Autocomplete suggestion / cycle through suggestions</span>
             <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">Shift+Tab</kbd>
             <span class="text-muted">Cycle suggestions in reverse</span>
-            <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">Space</kbd>
-            <span class="text-muted">Accept category as-is, move to content</span>
             <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">Backspace</kbd>
             <span class="text-muted">Delete character / go back to previous entry</span>
-            <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">A-Z, 0-9</kbd>
+            <kbd class="font-mono text-xs bg-default border border-default rounded px-1.5 py-0.5">A-Z, 0-9, Space</kbd>
             <span class="text-muted">Type category name</span>
           </template>
           <template v-else>
