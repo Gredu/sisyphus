@@ -400,15 +400,20 @@ function isActiveEntry(entry: TimeEntry): boolean {
   return !entry.endTime && editingIndex.value === null && !isStopped.value
 }
 
-const activeCategoryRef = ref<HTMLInputElement | null>(null)
-const activeContentRef = ref<HTMLInputElement | null>(null)
+const activeCategoryRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
+const activeContentRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
+
+function getInputEl(r: HTMLInputElement | HTMLInputElement[] | null): HTMLInputElement | undefined {
+  if (!r) return undefined
+  return Array.isArray(r) ? r[0] : r
+}
 
 function focusActiveField() {
   nextTick(() => {
     if (editingField.value === 'category') {
-      activeCategoryRef.value?.focus()
+      getInputEl(activeCategoryRef.value)?.focus()
     } else {
-      activeContentRef.value?.focus()
+      getInputEl(activeContentRef.value)?.focus()
     }
   })
 }
