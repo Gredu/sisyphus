@@ -581,12 +581,9 @@ function onDragEnd(event: { oldIndex?: number, newIndex?: number, from: HTMLElem
 }
 
 const defaultTitle = 'Sisyphus'
-watchEffect(() => {
+const pageTitle = computed(() => {
   const active = getActiveEntry()
-  if (!active) {
-    document.title = defaultTitle
-    return
-  }
+  if (!active) return defaultTitle
   // depend on currentTime so this re-runs every tick
   const now = currentTime.value
   const nowTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
@@ -598,8 +595,9 @@ watchEffect(() => {
   }
   const h = Math.floor(Math.max(0, totalMinutes) / 60).toString().padStart(2, '0')
   const m = (Math.max(0, totalMinutes) % 60).toString().padStart(2, '0')
-  document.title = `${h}:${m} — ${defaultTitle}`
+  return `${h}:${m} — ${defaultTitle}`
 })
+useHead({ title: pageTitle })
 
 onMounted(() => {
   loadEntries()
