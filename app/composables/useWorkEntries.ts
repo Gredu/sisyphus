@@ -145,6 +145,7 @@ function stopWorking() {
     }
   }
   isStopped.value = true
+  currentView.value = 'summary'
   saveEntries()
 }
 
