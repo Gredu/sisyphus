@@ -978,10 +978,16 @@ onUnmounted(() => {
                 />
               </div>
               <div class="flex flex-col items-center font-mono min-w-[5ch]">
-                <TimePicker v-model="entry.startTime" />
+                <TimePicker
+                  v-model="entry.startTime"
+                  :quick-set="index > 0 ? group.entries[index - 1]?.endTime ?? undefined : undefined"
+                  quick-set-label="Prev end"
+                />
                 <TimePicker
                   v-if="entry.endTime"
                   v-model="entry.endTime"
+                  :quick-set="index < group.entries.length - 1 ? group.entries[index + 1]?.startTime ?? undefined : undefined"
+                  quick-set-label="Next start"
                 />
                 <span
                   v-else
