@@ -48,6 +48,18 @@ function onKeydown(event: KeyboardEvent) {
 function onBlur() {
   parseAndEmit(draft.value)
 }
+
+function adjustMinutes(delta: number) {
+  const [h = 0, m = 0] = props.modelValue.split(':').map(Number)
+  let total = h * 60 + m + delta
+  if (total < 0) total = 0
+  if (total > 23 * 60 + 59) total = 23 * 60 + 59
+  const newH = Math.floor(total / 60).toString().padStart(2, '0')
+  const newM = (total % 60).toString().padStart(2, '0')
+  const newValue = `${newH}:${newM}`
+  emit('update:modelValue', newValue)
+  draft.value = newValue
+}
 </script>
 
 <template>
@@ -78,6 +90,18 @@ function onBlur() {
           @keydown="onKeydown"
           @blur="onBlur"
         />
+        <div class="flex gap-0.5">
+          <UButton
+            v-for="delta in [-15, -10, -5, 5, 10, 15]"
+            :key="delta"
+            :label="(delta > 0 ? '+' : '') + delta"
+            variant="soft"
+            color="neutral"
+            size="xs"
+            class="flex-1"
+            @click="adjustMinutes(delta)"
+          />
+        </div>
         <UButton
           v-if="props.quickSet"
           :label="`${quickSetLabel ?? 'Set'} ${quickSet}`"
