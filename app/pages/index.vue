@@ -248,6 +248,7 @@ interface CalendarDay {
 }
 
 const calendarDays = computed<CalendarDay[]>(() => {
+  if (currentView.value !== 'calendar') return []
   const year = calendarMonth.value.getFullYear()
   const month = calendarMonth.value.getMonth()
   const firstDay = new Date(year, month, 1)
@@ -343,6 +344,25 @@ function fmt(d: Date): string {
 
 const weekDayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+const categoryDraft = ref('')
+const contentDraft = ref('')
+
+function syncDraftsFromEntry() {
+  const current = getActiveEntry()
+  if (current) {
+    categoryDraft.value = current.category
+    contentDraft.value = current.content
+  }
+}
+
+function syncDraftsToEntry() {
+  const current = getActiveEntry()
+  if (current) {
+    current.category = categoryDraft.value
+    current.content = contentDraft.value
+  }
+}
+
 const knownCategories = computed(() => {
   const cats = new Set<string>()
   for (const entry of entries.value) {
@@ -352,10 +372,10 @@ const knownCategories = computed(() => {
 })
 
 const suggestions = computed(() => {
-  const current = getActiveEntry()
-  if (!current || editingField.value !== 'category' || !current.category) return []
+  if (editingField.value !== 'category' || !categoryDraft.value) return []
+  const lower = categoryDraft.value.toLowerCase()
   return knownCategories.value.filter(
-    c => c.toLowerCase().startsWith(current.category.toLowerCase()) && c.toLowerCase() !== current.category.toLowerCase()
+    c => c.toLowerCase().startsWith(lower) && c.toLowerCase() !== lower
   )
 })
 
@@ -364,11 +384,11 @@ watch(suggestions, () => {
 })
 
 function acceptSuggestion() {
-  const current = getActiveEntry()
-  if (!current || !current.category) return
+  if (!categoryDraft.value) return
   if (suggestions.value.length > 0) {
-    current.category = suggestions.value[selectedSuggestionIndex.value]!
+    categoryDraft.value = suggestions.value[selectedSuggestionIndex.value]!
   }
+  syncDraftsToEntry()
   selectedSuggestionIndex.value = 0
   editingField.value = 'content'
 }
@@ -392,6 +412,8 @@ function startNewEntry() {
     entries.value.push({ id: crypto.randomUUID(), date: dateStr, startTime: now, endTime: null, category: '', content: '' })
     editingField.value = 'category'
   }
+  categoryDraft.value = ''
+  contentDraft.value = ''
   selectedSuggestionIndex.value = 0
   focusActiveField()
 }
@@ -420,13 +442,18 @@ function focusActiveField() {
 
 watch(editingField, () => focusActiveField())
 
-function handleActiveCategoryKeydown(event: KeyboardEvent) {
-  const current = getActiveEntry()
-  if (!current) return
+watch(isStopped, (stopped) => {
+  if (!stopped) {
+    syncDraftsFromEntry()
+    focusActiveField()
+  }
+})
 
+function handleActiveCategoryKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter') {
     event.preventDefault()
-    if (!current.category) return
+    if (!categoryDraft.value) return
+    syncDraftsToEntry()
     editingField.value = 'content'
     selectedSuggestionIndex.value = 0
     return
@@ -446,8 +473,10 @@ function handleActiveCategoryKeydown(event: KeyboardEvent) {
     return
   }
 
-  if (event.key === 'Backspace' && current.category.length === 0) {
+  if (event.key === 'Backspace' && categoryDraft.value.length === 0) {
     event.preventDefault()
+    const current = getActiveEntry()
+    if (!current) return
     const todayEntries = entries.value.filter(e => e.date === current.date)
     if (todayEntries.length <= 1) return
     const activeIdx = entries.value.indexOf(current)
@@ -456,23 +485,22 @@ function handleActiveCategoryKeydown(event: KeyboardEvent) {
     if (previous) {
       previous.endTime = null
       editingField.value = previous.content ? 'content' : 'category'
+      syncDraftsFromEntry()
       focusActiveField()
     }
   }
 }
 
 function handleActiveContentKeydown(event: KeyboardEvent) {
-  const current = getActiveEntry()
-  if (!current) return
-
   if (event.key === 'Enter') {
     event.preventDefault()
-    if (!current.category) return
+    if (!categoryDraft.value) return
+    syncDraftsToEntry()
     startNewEntry()
     return
   }
 
-  if (event.key === 'Backspace' && current.content.length === 0) {
+  if (event.key === 'Backspace' && contentDraft.value.length === 0) {
     event.preventDefault()
     editingField.value = 'category'
   }
@@ -552,8 +580,12 @@ function copyFinalizedRecord(entry: FinalizedEntry, index: number) {
   showCopied(`finalized-${index}`)
 }
 
+let saveTimeout: ReturnType<typeof setTimeout>
 watch(entries, () => {
-  localStorage.setItem('sisyphus-entries', JSON.stringify(entries.value))
+  clearTimeout(saveTimeout)
+  saveTimeout = setTimeout(() => {
+    localStorage.setItem('sisyphus-entries', JSON.stringify(entries.value))
+  }, 300)
 }, { deep: true })
 
 watch(primaryThresholds, (v) => {
@@ -614,7 +646,10 @@ onMounted(() => {
     currentTime.value = new Date()
     colonVisible.value = !colonVisible.value
   }, 500)
-  if (getActiveEntry()) focusActiveField()
+  if (getActiveEntry()) {
+    syncDraftsFromEntry()
+    focusActiveField()
+  }
 })
 
 onUnmounted(() => {
@@ -1003,16 +1038,17 @@ onUnmounted(() => {
                   <div class="relative flex items-center gap-1">
                     <input
                       ref="activeCategoryRef"
-                      v-model="entry.category"
+                      v-model="categoryDraft"
                       class="bg-transparent outline-none font-semibold text-sm w-full"
                       placeholder="Category"
                       @keydown="handleActiveCategoryKeydown"
                       @focus="editingField = 'category'"
+                      @blur="syncDraftsToEntry()"
                     />
                     <span
                       v-if="editingField === 'category' && suggestions.length > 0"
                       class="absolute left-0 pointer-events-none font-semibold text-sm text-muted/40"
-                    >{{ entry.category }}{{ suggestions[selectedSuggestionIndex]?.slice(entry.category.length) }}</span>
+                    >{{ categoryDraft }}{{ suggestions[selectedSuggestionIndex]?.slice(categoryDraft.length) }}</span>
                     <div
                       v-if="editingField === 'category' && suggestions.length > 1"
                       class="absolute left-0 top-full z-10 mt-1 rounded-lg border border-default bg-default shadow-lg py-1"
@@ -1029,11 +1065,12 @@ onUnmounted(() => {
                   </div>
                   <input
                     ref="activeContentRef"
-                    v-model="entry.content"
+                    v-model="contentDraft"
                     class="bg-transparent outline-none text-sm text-muted w-full"
                     placeholder="Content"
                     @keydown="handleActiveContentKeydown"
                     @focus="editingField = 'content'"
+                    @blur="syncDraftsToEntry()"
                   />
                 </template>
                 <template v-else>
