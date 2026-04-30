@@ -131,19 +131,23 @@ function formatTime(date: Date): string {
 }
 
 function getActiveEntry(): TimeEntry | null {
-  return entries.value.find(e => !e.endTime) ?? null
+  return entries.value.findLast(e => !e.endTime) ?? null
+}
+
+function closeAllActive(now: string) {
+  for (let i = entries.value.length - 1; i >= 0; i--) {
+    const e = entries.value[i]!
+    if (e.endTime) continue
+    if (!e.category && !e.content) {
+      entries.value.splice(i, 1)
+    } else {
+      e.endTime = now
+    }
+  }
 }
 
 function stopWorking() {
-  const active = getActiveEntry()
-  if (active) {
-    if (!active.category && !active.content) {
-      const idx = entries.value.indexOf(active)
-      if (idx !== -1) entries.value.splice(idx, 1)
-    } else {
-      active.endTime = formatTime(new Date())
-    }
-  }
+  closeAllActive(formatTime(new Date()))
   isStopped.value = true
   currentView.value = 'summary'
   saveEntries()
@@ -152,6 +156,7 @@ function stopWorking() {
 function continueWorking() {
   const d = new Date()
   const timeNow = formatTime(d)
+  closeAllActive(timeNow)
   entries.value.push({ id: crypto.randomUUID(), date: formatDate(d), startTime: timeNow, endTime: null, category: '', content: '' })
   isStopped.value = false
   currentView.value = 'record'
@@ -187,6 +192,7 @@ export function useWorkEntries() {
     startNowTimer,
     stopNowTimer,
     getActiveEntry,
+    closeAllActive,
     stopWorking,
     continueWorking,
     startOver

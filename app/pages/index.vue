@@ -2,7 +2,7 @@
 import type { FinalizedEntry } from '~/composables/useWorkEntries'
 import { VueDraggable } from 'vue-draggable-plus'
 
-const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, timeFormat, getActiveEntry, stopWorking, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, timeFormat, getActiveEntry, closeAllActive, stopWorking, continueWorking, startOver } = useWorkEntries()
 type TimeEntry = typeof entries.value[number]
 const selectedSuggestionIndex = ref(0)
 
@@ -402,16 +402,10 @@ function startNewEntry() {
   const now = formatTime(d)
   const dateStr = currentDateStr()
 
-  if (!isWorking.value) {
-    isWorking.value = true
-    entries.value.push({ id: crypto.randomUUID(), date: dateStr, startTime: now, endTime: null, category: '', content: '' })
-    editingField.value = 'category'
-  } else {
-    const current = getActiveEntry()
-    if (current) current.endTime = now
-    entries.value.push({ id: crypto.randomUUID(), date: dateStr, startTime: now, endTime: null, category: '', content: '' })
-    editingField.value = 'category'
-  }
+  closeAllActive(now)
+  isWorking.value = true
+  entries.value.push({ id: crypto.randomUUID(), date: dateStr, startTime: now, endTime: null, category: '', content: '' })
+  editingField.value = 'category'
   categoryDraft.value = ''
   contentDraft.value = ''
   selectedSuggestionIndex.value = 0
