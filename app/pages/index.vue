@@ -175,13 +175,12 @@ function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Ba
   }))
 }
 
-function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
+function computeRoundedTotal(dayEntries: typeof entries.value): number {
   const nowTime = `${clockHours.value}:${clockMinutes.value}`
   const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
   const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
   const roundUpVal = (m: number, interval: number) => Math.ceil(m / interval) * interval
 
-  // Compute rounded total for threshold comparison
   let roundedTotal = 0
   if (!collapse.value) {
     for (const e of includable) {
@@ -202,11 +201,16 @@ function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
       roundedTotal += roundInterval > 0 && roundOrder.value === 'after' ? roundUpVal(mins, roundInterval) : mins
     }
   }
+  return roundedTotal
+}
 
+function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
+  const nowTime = `${clockHours.value}:${clockMinutes.value}`
+  const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
   return buildBadges(date, includable.map((e) => {
     const minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
     return { category: e.category, minutes }
-  }), roundedTotal)
+  }), computeRoundedTotal(dayEntries))
 }
 
 // Calendar view
@@ -578,6 +582,52 @@ function copyFinalizedRecord(entry: FinalizedEntry, index: number) {
   navigator.clipboard.writeText(formatFinalizedText(entry))
   showCopied(`finalized-${index}`)
 }
+
+let audioCtx: AudioContext | null = null
+function playThresholdSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    const ctx = audioCtx
+    const start = ctx.currentTime
+    const notes = [{ freq: 523.25, at: 0 }, { freq: 659.25, at: 0.13 }, { freq: 783.99, at: 0.26 }]
+    for (const note of notes) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = note.freq
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      const t = start + note.at
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5)
+      osc.start(t)
+      osc.stop(t + 0.5)
+    }
+  } catch {
+    // audio unavailable — ignore
+  }
+}
+
+let thresholdInitialized = false
+let prevThresholdMet = new Set<string>()
+watchEffect(() => {
+  const met = new Set<string>()
+  for (const group of entriesByDate.value) {
+    if (computeRoundedTotal(group.entries) >= getThreshold(group.date)) met.add(group.date)
+  }
+  if (thresholdInitialized) {
+    for (const date of met) {
+      if (!prevThresholdMet.has(date)) {
+        playThresholdSound()
+        break
+      }
+    }
+  }
+  prevThresholdMet = met
+  thresholdInitialized = true
+})
 
 let saveTimeout: ReturnType<typeof setTimeout>
 watch(entries, () => {
