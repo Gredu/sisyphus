@@ -393,6 +393,11 @@ function acceptSuggestion() {
   editingField.value = 'content'
 }
 
+function selectSuggestion(index: number) {
+  selectedSuggestionIndex.value = index
+  acceptSuggestion()
+}
+
 function currentDateStr(): string {
   return new Date().toISOString().split('T')[0]!
 }
@@ -1050,8 +1055,9 @@ onUnmounted(() => {
                       <div
                         v-for="(s, i) in suggestions"
                         :key="s"
-                        class="px-3 py-1.5 text-sm cursor-default"
+                        class="px-3 py-1.5 text-sm cursor-pointer hover:bg-primary/10 hover:text-primary"
                         :class="i === selectedSuggestionIndex ? 'bg-primary/10 text-primary font-medium' : 'text-muted'"
+                        @mousedown.prevent="selectSuggestion(i)"
                       >
                         {{ s }}
                       </div>
