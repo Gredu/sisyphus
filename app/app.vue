@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, timeFormat, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, entries, threshold, currentView, collapse, joinCharacter, roundOrder, showHotkeys, defaultPrimaryThreshold, timeFormat, today, continueWorking, startOver } = useWorkEntries()
 
 const colorMode = useColorMode()
 const colorModeOptions = [
@@ -32,9 +32,8 @@ const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
 const wouldCreateNewDate = computed(() => {
   if (entries.value.length === 0) return !isWorking.value
   if (!isStopped.value) return false
-  const today = new Date().toISOString().split('T')[0]
   const lastDate = entries.value[entries.value.length - 1]?.date
-  return lastDate !== today
+  return lastDate !== today.value
 })
 
 const configOpen = ref(false)

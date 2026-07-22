@@ -54,11 +54,13 @@ function formatDuration(minutes: number): string {
 }
 
 const now = ref(formatTime(new Date()))
+const today = ref(formatDate(new Date()))
 let nowInterval: ReturnType<typeof setInterval>
 
 function startNowTimer() {
   nowInterval = setInterval(() => {
     now.value = formatTime(new Date())
+    today.value = formatDate(new Date())
   }, 1000)
 }
 
@@ -180,6 +182,7 @@ export function useWorkEntries() {
     threshold,
     isFinalized,
     currentView,
+    today,
     collapse,
     joinCharacter,
     roundOrder,
