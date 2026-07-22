@@ -5,31 +5,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev          # Start dev server (http://localhost:3000)
-pnpm build        # Production build
-pnpm lint         # ESLint
-pnpm typecheck    # vue-tsc type checking
+bun run dev          # Start dev server (http://localhost:3000)
+bun run build        # Production build
+bun run lint         # ESLint
+bun run typecheck    # vue-tsc type checking (via `nuxt typecheck`)
 ```
 
-CI runs `pnpm lint` and `pnpm typecheck` on every push. No tests exist.
+Local dev uses bun (`packageManager: bun` in package.json, `bun.lock`). CI (`.github/workflows/ci.yml`) still installs and runs everything through pnpm — no `pnpm-lock.yaml` is committed, so it resolves fresh. No tests exist.
 
 ## Architecture
 
-Nuxt 4 app with Nuxt UI v4, Tailwind v4, and Lucide icons. Theme: green primary, slate neutral.
+Nuxt 4 app with Nuxt UI v4, Tailwind v4, and Lucide icons. Theme: green primary, slate neutral (`app/app.config.ts`).
 
 ### State Management
 
-All shared state lives in `app/composables/useWorkEntries.ts` as module-level refs (singleton pattern), shared between `app.vue` (header controls, config modal) and `pages/index.vue` (entry UI, keyboard handling).
+All shared state lives in `app/composables/useWorkEntries.ts` as module-level refs (singleton pattern), shared between `app.vue` (header controls, config modal) and `pages/index.vue` (entry UI, keyboard handling). `currentView` is `'record' | 'summary' | 'calendar'` — the calendar view (month grid, navigation) lives entirely in `pages/index.vue`.
 
 ### Keyboard-Driven Input
 
-The app does **not** use native form inputs. A global `keydown` listener in `pages/index.vue` appends characters programmatically to the current entry's `category` or `content` field. The `editingField` ref controls which field receives input.
+The active entry's `category` and `content` fields are native `<input v-model>` elements in `pages/index.vue` (completed entries use Nuxt UI's `UInput`) — typing is native browser behavior, not programmatic. `editingField` tracks which of the two is focused. Keydown handlers (`handleActiveCategoryKeydown` / `handleActiveContentKeydown`) only intercept specific keys on top of that: `Enter` confirms/advances, `Tab`/`Shift+Tab` cycle autocomplete suggestions, and `Backspace` on an empty field merges back into the previous entry. The `TimePicker.vue` component (start/end time editing) similarly uses a native `<input>` inside a popover, plus quick minute-adjustment buttons.
 
-A PostToolUse hook (`.claude/settings.local.json`) reminds you to keep the hotkeys guide template in `pages/index.vue` in sync when editing `index.vue`, `useWorkEntries.ts`, or `app.vue`.
+Keep the hotkeys guide template (the `showHotkeys` block starting around line 715 in `pages/index.vue`) in sync when editing `index.vue`, `useWorkEntries.ts`, or `app.vue` — there's no automated reminder for this, so it's easy to let it drift.
 
 ### Data Flow
 
-Entries persist to `localStorage` (key: `working-hours-entries`). The `finalizedEntries` computed handles category grouping, time rounding, and content deduplication for the Summarize View. A `now` ref ticks every second to keep in-progress entry durations reactive.
+Entries persist to `localStorage` under `sisyphus-entries` (the `STORAGE_KEY` constant in `useWorkEntries.ts`). Related keys: `sisyphus-default-threshold` (default rounding threshold, in the composable) and `sisyphus-primary-thresholds` (per-category thresholds, set directly in `pages/index.vue`). The `finalizedEntries` computed handles category grouping, time rounding, and content deduplication for the Summarize View. A `now` ref ticks every second to keep in-progress entry durations reactive.
 
 ## ESLint
 
