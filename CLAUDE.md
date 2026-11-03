@@ -29,7 +29,7 @@ Keep the hotkeys guide template (the `showHotkeys` block starting around line 71
 
 ### Data Flow
 
-Entries persist to `localStorage` under `sisyphus-entries` (the `STORAGE_KEY` constant in `useWorkEntries.ts`). Related keys: `sisyphus-default-threshold` (default rounding threshold, in the composable) and `sisyphus-primary-thresholds` (per-category thresholds, set directly in `pages/index.vue`). The `finalizedEntries` computed handles category grouping, time rounding, and content deduplication for the Summarize View. A `now` ref ticks every second to keep in-progress entry durations reactive.
+Entries persist to `localStorage` under `sisyphus-entries` (the `STORAGE_KEY` constant in `useWorkEntries.ts`). Related keys: `sisyphus-default-threshold` (default rounding threshold, in the composable) and `sisyphus-primary-thresholds` (per-category thresholds, set directly in `pages/index.vue`). `groupEntries` (in the composable) is the shared primitive for "sum minutes per category, honoring rounding order" — `pages/index.vue`'s `finalizeForDay`, `summaryBadgesForDay`, `computeRoundedTotal`, and the calendar's per-day cells all build on it rather than reimplementing grouping/rounding themselves. A `now` ref ticks every second to keep in-progress entry durations reactive.
 
 ## ESLint
 
