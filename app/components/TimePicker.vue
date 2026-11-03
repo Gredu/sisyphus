@@ -89,7 +89,7 @@ function adjustMinutes(delta: number) {
           placeholder="HH:MM"
           @keydown="onKeydown"
           @blur="onBlur"
-        />
+        >
         <div class="flex gap-0.5">
           <UButton
             v-for="delta in [-15, -10, -5, 5, 10, 15]"
