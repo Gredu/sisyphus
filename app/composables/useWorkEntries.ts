@@ -7,7 +7,7 @@ export interface TimeEntry {
   content: string
 }
 
-function formatDate(date: Date): string {
+export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0]!
 }
 
@@ -34,7 +34,14 @@ export interface FinalizedEntry {
   content: string
 }
 
-function calcMinutes(start: string, end: string): number {
+export interface Badge {
+  icon?: string
+  label?: string
+  duration: string
+  primary?: boolean
+}
+
+export function calcMinutes(start: string, end: string): number {
   const [sh = 0, sm = 0] = start.split(':').map(Number)
   const [eh = 0, em = 0] = end.split(':').map(Number)
   return (eh * 60 + em) - (sh * 60 + sm)
@@ -44,13 +51,59 @@ function roundUp(minutes: number, interval: number): number {
   return Math.ceil(minutes / interval) * interval
 }
 
-function formatDuration(minutes: number): string {
+export function formatDuration(minutes: number): string {
   if (timeFormat.value === 'decimal') {
     return (minutes / 60).toFixed(2)
   }
   const h = Math.floor(minutes / 60).toString().padStart(2, '0')
   const m = (minutes % 60).toString().padStart(2, '0')
   return `${h}:${m}`
+}
+
+export interface GroupedEntry {
+  category: string
+  minutes: number
+  contents: string[]
+}
+
+export interface GroupOptions {
+  roundInterval: number
+  collapse: boolean
+  roundOrder: 'before' | 'after'
+}
+
+// Shared by the live record grouping below, the per-day summary/record views,
+// and the calendar cells — all four need "sum minutes per category, honoring
+// rounding order" and used to reimplement it separately.
+export function groupEntries(items: TimeEntry[], nowTime: string, opts: GroupOptions): GroupedEntry[] {
+  const { roundInterval, collapse, roundOrder } = opts
+  const includable = items.filter(e => e.endTime || e.category || e.content)
+
+  if (!collapse) {
+    return includable.map((e) => {
+      let minutes = calcMinutes(e.startTime, e.endTime || nowTime)
+      if (roundInterval > 0) minutes = roundUp(minutes, roundInterval)
+      return { category: e.category, minutes, contents: e.content ? [e.content] : [] }
+    })
+  }
+
+  const grouped = new Map<string, GroupedEntry>()
+  for (const e of includable) {
+    let minutes = calcMinutes(e.startTime, e.endTime || nowTime)
+    if (roundInterval > 0 && roundOrder === 'before') minutes = roundUp(minutes, roundInterval)
+    const existing = grouped.get(e.category)
+    if (existing) {
+      existing.minutes += minutes
+      if (e.content && !existing.contents.includes(e.content)) existing.contents.push(e.content)
+    } else {
+      grouped.set(e.category, { category: e.category, minutes, contents: e.content ? [e.content] : [] })
+    }
+  }
+
+  return [...grouped.values()].map((g) => {
+    const minutes = roundInterval > 0 && roundOrder === 'after' ? roundUp(g.minutes, roundInterval) : g.minutes
+    return { ...g, minutes }
+  })
 }
 
 const now = ref(formatTime(new Date()))
@@ -67,46 +120,6 @@ function startNowTimer() {
 function stopNowTimer() {
   clearInterval(nowInterval)
 }
-
-const finalizedEntries = computed<FinalizedEntry[]>(() => {
-  const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
-  const includable = entries.value.filter(e => e.endTime || e.category || e.content)
-
-  function getEndTime(e: TimeEntry): string {
-    return e.endTime || now.value
-  }
-
-  if (!collapse.value) {
-    return includable.map((e) => {
-      let minutes = calcMinutes(e.startTime, getEndTime(e))
-      if (roundInterval > 0) minutes = roundUp(minutes, roundInterval)
-      return { duration: formatDuration(minutes), category: e.category, content: e.content }
-    })
-  }
-
-  const grouped = new Map<string, { totalMinutes: number, contents: string[] }>()
-  for (const e of includable) {
-    let minutes = calcMinutes(e.startTime, getEndTime(e))
-    if (roundInterval > 0 && roundOrder.value === 'before') minutes = roundUp(minutes, roundInterval)
-    const existing = grouped.get(e.category)
-    if (existing) {
-      existing.totalMinutes += minutes
-      if (e.content && !existing.contents.includes(e.content)) existing.contents.push(e.content)
-    } else {
-      grouped.set(e.category, { totalMinutes: minutes, contents: e.content ? [e.content] : [] })
-    }
-  }
-
-  return [...grouped.entries()].map(([category, data]) => {
-    let minutes = data.totalMinutes
-    if (roundInterval > 0 && roundOrder.value === 'after') minutes = roundUp(minutes, roundInterval)
-    return {
-      duration: formatDuration(minutes),
-      category,
-      content: data.contents.join(joinCharacter.value + ' ')
-    }
-  })
-})
 
 function saveEntries() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.value))
@@ -128,7 +141,7 @@ watch(defaultPrimaryThreshold, (v) => {
   localStorage.setItem('sisyphus-default-threshold', String(v))
 })
 
-function formatTime(date: Date): string {
+export function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -186,7 +199,6 @@ export function useWorkEntries() {
     collapse,
     joinCharacter,
     roundOrder,
-    finalizedEntries,
     showHotkeys,
     defaultPrimaryThreshold,
     editingField,

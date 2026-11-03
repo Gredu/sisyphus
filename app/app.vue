@@ -12,23 +12,6 @@ const colorModePreference = computed({
   set: (v: string) => { colorMode.preference = v }
 })
 
-const defaultThresholdHours = computed({
-  get: () => Math.floor(defaultPrimaryThreshold.value / 60).toString().padStart(2, '0'),
-  set: (v: string) => { defaultPrimaryThreshold.value = Number(v) * 60 + (defaultPrimaryThreshold.value % 60) }
-})
-const defaultThresholdMinutes = computed({
-  get: () => (defaultPrimaryThreshold.value % 60).toString().padStart(2, '0'),
-  set: (v: string) => { defaultPrimaryThreshold.value = Math.floor(defaultPrimaryThreshold.value / 60) * 60 + Number(v) }
-})
-const thresholdHourOptions = Array.from({ length: 24 }, (_, i) => ({
-  label: i.toString().padStart(2, '0'),
-  value: i.toString().padStart(2, '0')
-}))
-const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
-  label: i.toString().padStart(2, '0'),
-  value: i.toString().padStart(2, '0')
-}))
-
 const wouldCreateNewDate = computed(() => {
   if (entries.value.length === 0) return !isWorking.value
   if (!isStopped.value) return false
@@ -183,21 +166,7 @@ const roundUpOptions = [
                   Default threshold for highlighting when a day's total reaches this amount.
                 </p>
               </div>
-              <div class="flex items-center gap-1">
-                <USelect
-                  v-model="defaultThresholdHours"
-                  :items="thresholdHourOptions"
-                  class="w-20"
-                  size="sm"
-                />
-                <span class="text-sm font-mono font-bold">:</span>
-                <USelect
-                  v-model="defaultThresholdMinutes"
-                  :items="thresholdMinuteOptions"
-                  class="w-20"
-                  size="sm"
-                />
-              </div>
+              <ThresholdInput v-model="defaultPrimaryThreshold" />
             </div>
           </div>
 

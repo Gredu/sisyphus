@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { FinalizedEntry } from '~/composables/useWorkEntries'
+import type { Badge, FinalizedEntry } from '~/composables/useWorkEntries'
 import { VueDraggable } from 'vue-draggable-plus'
 
-const { isWorking, isStopped, isFinalized, currentView, finalizedEntries, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, defaultPrimaryThreshold, timeFormat, getActiveEntry, closeAllActive, stopWorking, continueWorking, startOver } = useWorkEntries()
+const { isWorking, isStopped, isFinalized, currentView, entries, loadEntries, startNowTimer, stopNowTimer, showHotkeys, editingField, editingIndex, threshold, roundOrder, collapse, joinCharacter, defaultPrimaryThreshold, today, getActiveEntry, closeAllActive, stopWorking, continueWorking, startOver } = useWorkEntries()
 type TimeEntry = typeof entries.value[number]
 const selectedSuggestionIndex = ref(0)
 
@@ -12,30 +12,9 @@ function getThreshold(date: string): number {
   return primaryThresholds.value[date] ?? defaultPrimaryThreshold.value
 }
 
-function getThresholdHours(date: string): string {
-  return Math.floor(getThreshold(date) / 60).toString().padStart(2, '0')
+function setThreshold(date: string, minutes: number) {
+  primaryThresholds.value[date] = minutes
 }
-
-function getThresholdMinutes(date: string): string {
-  return (getThreshold(date) % 60).toString().padStart(2, '0')
-}
-
-function setThresholdHours(date: string, hours: string) {
-  primaryThresholds.value[date] = Number(hours) * 60 + (getThreshold(date) % 60)
-}
-
-function setThresholdMinutes(date: string, minutes: string) {
-  primaryThresholds.value[date] = Math.floor(getThreshold(date) / 60) * 60 + Number(minutes)
-}
-
-const thresholdHourOptions = Array.from({ length: 24 }, (_, i) => ({
-  label: i.toString().padStart(2, '0'),
-  value: i.toString().padStart(2, '0')
-}))
-const thresholdMinuteOptions = Array.from({ length: 60 }, (_, i) => ({
-  label: i.toString().padStart(2, '0'),
-  value: i.toString().padStart(2, '0')
-}))
 
 function displayDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -60,14 +39,18 @@ interface DayGroup {
   entries: typeof entries.value
 }
 
-const entriesByDate = computed<DayGroup[]>(() => {
+function groupByDate(items: typeof entries.value): Map<string, typeof entries.value> {
   const groups = new Map<string, typeof entries.value>()
-  for (const entry of entries.value) {
+  for (const entry of items) {
     const date = entry.date || '1970-01-01'
     if (!groups.has(date)) groups.set(date, [])
     groups.get(date)!.push(entry)
   }
-  return [...groups.entries()]
+  return groups
+}
+
+const entriesByDate = computed<DayGroup[]>(() => {
+  return [...groupByDate(entries.value).entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([date, dayEntries]) => ({
       date,
@@ -76,30 +59,16 @@ const entriesByDate = computed<DayGroup[]>(() => {
     }))
 })
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+function nowTime(): string {
+  return `${clockHours.value}:${clockMinutes.value}`
 }
 
-function fmtDuration(minutes: number): string {
-  if (timeFormat.value === 'decimal') {
-    return (minutes / 60).toFixed(2)
-  }
-  const hh = Math.floor(minutes / 60).toString().padStart(2, '0')
-  const mm = (minutes % 60).toString().padStart(2, '0')
-  return `${hh}:${mm}`
+function groupInterval(): number {
+  return threshold.value !== 'none' ? Number(threshold.value) : 0
 }
 
-function calcMinutesFromTimes(start: string, end: string): number {
-  const [sh = 0, sm = 0] = start.split(':').map(Number)
-  const [eh = 0, em = 0] = end.split(':').map(Number)
-  return (eh * 60 + em) - (sh * 60 + sm)
-}
-
-interface Badge {
-  icon?: string
-  label?: string
-  duration: string
-  primary?: boolean
+function groupForDay(dayEntries: typeof entries.value) {
+  return groupEntries(dayEntries, nowTime(), { roundInterval: groupInterval(), collapse: collapse.value, roundOrder: roundOrder.value })
 }
 
 function buildBadges(date: string, items: { category: string, minutes: number }[], thresholdTotal?: number): Badge[] {
@@ -114,107 +83,40 @@ function buildBadges(date: string, items: { category: string, minutes: number }[
     }
   }
   const compareTotal = thresholdTotal ?? totalMinutes
-  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: fmtDuration(totalMinutes), primary: compareTotal >= getThreshold(date) }]
+  const badges: Badge[] = [{ icon: 'i-lucide-sigma', duration: formatDuration(totalMinutes), primary: compareTotal >= getThreshold(date) }]
   for (const [name, minutes] of excluded) {
-    badges.push({ label: name, duration: fmtDuration(minutes) })
+    badges.push({ label: name, duration: formatDuration(minutes) })
   }
   return badges
 }
 
 function finalizeForDay(dayEntries: typeof entries.value): FinalizedEntry[] {
-  const nowTime = `${clockHours.value}:${clockMinutes.value}`
-  const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
-  const roundUpVal = (m: number, interval: number) => Math.ceil(m / interval) * interval
-  const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
-
-  if (!collapse.value) {
-    return includable.map((e) => {
-      let minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-      if (roundInterval > 0) minutes = roundUpVal(minutes, roundInterval)
-      return { duration: fmtDuration(minutes), category: e.category, content: e.content }
-    })
-  }
-
-  const grouped = new Map<string, { totalMinutes: number, contents: string[] }>()
-  for (const e of includable) {
-    let minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-    if (roundInterval > 0 && roundOrder.value === 'before') minutes = roundUpVal(minutes, roundInterval)
-    const existing = grouped.get(e.category)
-    if (existing) {
-      existing.totalMinutes += minutes
-      if (e.content && !existing.contents.includes(e.content)) existing.contents.push(e.content)
-    } else {
-      grouped.set(e.category, { totalMinutes: minutes, contents: e.content ? [e.content] : [] })
-    }
-  }
-
-  const { joinCharacter } = useWorkEntries()
-  return [...grouped.entries()].map(([category, data]) => {
-    let minutes = data.totalMinutes
-    if (roundInterval > 0 && roundOrder.value === 'after') minutes = roundUpVal(minutes, roundInterval)
-    return {
-      duration: fmtDuration(minutes),
-      category,
-      content: data.contents.join(joinCharacter.value + ' ')
-    }
-  })
-}
-
-function parseDurationToMinutes(duration: string): number {
-  if (duration.includes(':')) {
-    const [h, m] = duration.split(':').map(Number)
-    return (h ?? 0) * 60 + (m ?? 0)
-  }
-  return Math.round(Number(duration) * 60)
-}
-
-function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Badge[] {
-  const finalized = finalizeForDay(dayEntries)
-  return buildBadges(date, finalized.map((e) => {
-    return { category: e.category, minutes: parseDurationToMinutes(e.duration) }
+  return groupForDay(dayEntries).map(g => ({
+    duration: formatDuration(g.minutes),
+    category: g.category,
+    content: g.contents.join(joinCharacter.value + ' ')
   }))
 }
 
-function computeRoundedTotal(dayEntries: typeof entries.value): number {
-  const nowTime = `${clockHours.value}:${clockMinutes.value}`
-  const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
-  const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
-  const roundUpVal = (m: number, interval: number) => Math.ceil(m / interval) * interval
+function summaryBadgesForDay(date: string, dayEntries: typeof entries.value): Badge[] {
+  return buildBadges(date, groupForDay(dayEntries))
+}
 
-  let roundedTotal = 0
-  if (!collapse.value) {
-    for (const e of includable) {
-      if (e.category.startsWith('!')) continue
-      let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-      if (roundInterval > 0) mins = roundUpVal(mins, roundInterval)
-      roundedTotal += mins
-    }
-  } else {
-    const grouped = new Map<string, number>()
-    for (const e of includable) {
-      if (e.category.startsWith('!')) continue
-      let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-      if (roundInterval > 0 && roundOrder.value === 'before') mins = roundUpVal(mins, roundInterval)
-      grouped.set(e.category, (grouped.get(e.category) || 0) + mins)
-    }
-    for (const [, mins] of grouped) {
-      roundedTotal += roundInterval > 0 && roundOrder.value === 'after' ? roundUpVal(mins, roundInterval) : mins
-    }
-  }
-  return roundedTotal
+function computeRoundedTotal(dayEntries: typeof entries.value): number {
+  return groupForDay(dayEntries)
+    .filter(g => !g.category.startsWith('!'))
+    .reduce((sum, g) => sum + g.minutes, 0)
 }
 
 function recordBadges(date: string, dayEntries: typeof entries.value): Badge[] {
-  const nowTime = `${clockHours.value}:${clockMinutes.value}`
   const includable = dayEntries.filter(e => e.endTime || e.category || e.content)
   return buildBadges(date, includable.map((e) => {
-    const minutes = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
+    const minutes = calcMinutes(e.startTime, e.endTime || nowTime())
     return { category: e.category, minutes }
   }), computeRoundedTotal(dayEntries))
 }
 
 // Calendar view
-const today = computed(() => currentTime.value.toISOString().split('T')[0])
 const calendarMonth = ref(new Date())
 
 const calendarMonthLabel = computed(() => {
@@ -263,18 +165,12 @@ const calendarDays = computed<CalendarDay[]>(() => {
   const days: CalendarDay[] = []
 
   // Build entries lookup by date
-  const nowTime = `${clockHours.value}:${clockMinutes.value}`
-  const byDate = new Map<string, typeof entries.value>()
-  for (const entry of entries.value) {
-    const date = entry.date || '1970-01-01'
-    if (!byDate.has(date)) byDate.set(date, [])
-    byDate.get(date)!.push(entry)
-  }
+  const byDate = groupByDate(entries.value)
 
   // Fill leading days from previous month
   for (let i = startDow - 1; i >= 0; i--) {
     const d = new Date(year, month, -i)
-    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
+    days.push({ date: formatDate(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
   }
 
   // Current month days
@@ -286,47 +182,22 @@ const calendarDays = computed<CalendarDay[]>(() => {
       continue
     }
 
-    const roundInterval = threshold.value !== 'none' ? Number(threshold.value) : 0
-    const roundUp = (m: number, interval: number) => Math.ceil(m / interval) * interval
-    const includable = dayEntries.filter(e => e.category || e.content)
-
-    let totalMinutes = 0
-    let categories: { name: string, duration: string }[]
-
-    if (!collapse.value) {
-      // No grouping — each entry individually, optionally rounded
-      const catMap = new Map<string, number>()
-      for (const e of includable) {
-        let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-        if (roundInterval > 0) mins = roundUp(mins, roundInterval)
-        if (!e.category.startsWith('!')) totalMinutes += mins
-        catMap.set(e.category, (catMap.get(e.category) || 0) + mins)
-      }
-      categories = [...catMap.entries()].map(([name, mins]) => ({ name, duration: fmtDuration(mins) }))
-    } else {
-      // Grouped by category with round order setting
-      const grouped = new Map<string, number>()
-      for (const e of includable) {
-        let mins = calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
-        if (roundInterval > 0 && roundOrder.value === 'before') mins = roundUp(mins, roundInterval)
-        grouped.set(e.category, (grouped.get(e.category) || 0) + mins)
-      }
-      if (roundInterval > 0 && roundOrder.value === 'after') {
-        for (const [cat, mins] of grouped) {
-          grouped.set(cat, roundUp(mins, roundInterval))
-        }
-      }
-      for (const [cat, mins] of grouped) {
-        if (!cat.startsWith('!')) totalMinutes += mins
-      }
-      categories = [...grouped.entries()].map(([name, mins]) => ({ name, duration: fmtDuration(mins) }))
-    }
+    // Calendar cells always show one line per category regardless of the global
+    // "collapse" setting (space is tight) — when collapse is off, rounding still
+    // happens per-entry before summing, i.e. the same as roundOrder 'before'.
+    const grouped = groupEntries(dayEntries, nowTime(), {
+      roundInterval: groupInterval(),
+      collapse: true,
+      roundOrder: collapse.value ? roundOrder.value : 'before'
+    })
+    const totalMinutes = grouped.filter(g => !g.category.startsWith('!')).reduce((sum, g) => sum + g.minutes, 0)
+    const categories = grouped.map(g => ({ name: g.category, duration: formatDuration(g.minutes) }))
 
     days.push({
       date: dateStr,
       day: d,
       isCurrentMonth: true,
-      total: totalMinutes > 0 ? fmtDuration(totalMinutes) : null,
+      total: totalMinutes > 0 ? formatDuration(totalMinutes) : null,
       totalPrimary: totalMinutes >= getThreshold(dateStr),
       categories
     })
@@ -336,15 +207,11 @@ const calendarDays = computed<CalendarDay[]>(() => {
   const remaining = 42 - days.length
   for (let i = 1; i <= remaining; i++) {
     const d = new Date(year, month + 1, i)
-    days.push({ date: fmt(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
+    days.push({ date: formatDate(d), day: d.getDate(), isCurrentMonth: false, total: null, totalPrimary: false, categories: [] })
   }
 
   return days
 })
-
-function fmt(d: Date): string {
-  return d.toISOString().split('T')[0]!
-}
 
 const weekDayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -402,18 +269,13 @@ function selectSuggestion(index: number) {
   acceptSuggestion()
 }
 
-function currentDateStr(): string {
-  return new Date().toISOString().split('T')[0]!
-}
-
 function startNewEntry() {
   const d = new Date()
   const now = formatTime(d)
-  const dateStr = currentDateStr()
 
   closeAllActive(now)
   isWorking.value = true
-  entries.value.push({ id: crypto.randomUUID(), date: dateStr, startTime: now, endTime: null, category: '', content: '' })
+  entries.value.push({ id: crypto.randomUUID(), date: today.value, startTime: now, endTime: null, category: '', content: '' })
   editingField.value = 'category'
   categoryDraft.value = ''
   contentDraft.value = ''
@@ -677,7 +539,7 @@ const pageTitle = computed(() => {
   let totalMinutes = 0
   for (const e of todayEntries) {
     if (e.category.startsWith('!')) continue
-    totalMinutes += calcMinutesFromTimes(e.startTime, e.endTime || nowTime)
+    totalMinutes += calcMinutes(e.startTime, e.endTime || nowTime)
   }
   const h = Math.floor(Math.max(0, totalMinutes) / 60).toString().padStart(2, '0')
   const m = (Math.max(0, totalMinutes) % 60).toString().padStart(2, '0')
@@ -825,20 +687,9 @@ onUnmounted(() => {
                   class="flex items-center gap-1 p-2"
                   @keydown.stop
                 >
-                  <USelect
-                    :model-value="getThresholdHours(day.date)"
-                    :items="thresholdHourOptions"
-                    class="w-20"
-                    size="sm"
-                    @update:model-value="setThresholdHours(day.date, $event)"
-                  />
-                  <span class="text-sm font-mono font-bold">:</span>
-                  <USelect
-                    :model-value="getThresholdMinutes(day.date)"
-                    :items="thresholdMinuteOptions"
-                    class="w-20"
-                    size="sm"
-                    @update:model-value="setThresholdMinutes(day.date, $event)"
+                  <ThresholdInput
+                    :model-value="getThreshold(day.date)"
+                    @update:model-value="setThreshold(day.date, $event)"
                   />
                 </div>
               </template>
@@ -865,68 +716,15 @@ onUnmounted(() => {
             <h1 class="text-2xl font-bold">
               {{ group.label }}
             </h1>
-            <UPopover :open="copiedId === `day-${group.date}`">
-              <UButton
-                icon="i-lucide-copy"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                @click="copyDaySummary(group)"
-              />
-              <template #content>
-                <div class="px-2 py-1 text-xs">
-                  Copied!
-                </div>
-              </template>
-            </UPopover>
-            <template
-              v-for="(badge, i) in summaryBadgesForDay(group.date, group.entries)"
-              :key="i"
-            >
-              <UPopover v-if="badge.icon">
-                <UBadge
-                  :color="badge.primary ? 'primary' : 'neutral'"
-                  variant="subtle"
-                  class="cursor-pointer"
-                >
-                  <UIcon
-                    :name="badge.icon"
-                    class="size-3.5"
-                  />
-                  {{ badge.duration }}
-                </UBadge>
-                <template #content>
-                  <div
-                    class="flex items-center gap-1 p-2"
-                    @keydown.stop
-                  >
-                    <USelect
-                      :model-value="getThresholdHours(group.date)"
-                      :items="thresholdHourOptions"
-                      class="w-20"
-                      size="sm"
-                      @update:model-value="setThresholdHours(group.date, $event)"
-                    />
-                    <span class="text-sm font-mono font-bold">:</span>
-                    <USelect
-                      :model-value="getThresholdMinutes(group.date)"
-                      :items="thresholdMinuteOptions"
-                      class="w-20"
-                      size="sm"
-                      @update:model-value="setThresholdMinutes(group.date, $event)"
-                    />
-                  </div>
-                </template>
-              </UPopover>
-              <UBadge
-                v-else
-                color="neutral"
-                variant="subtle"
-              >
-                <template v-if="badge.label">{{ badge.label }}:</template>
-                {{ badge.duration }}
-              </UBadge>
-            </template>
+            <CopyButton
+              :copied="copiedId === `day-${group.date}`"
+              @click="copyDaySummary(group)"
+            />
+            <DayBadges
+              :badges="summaryBadgesForDay(group.date, group.entries)"
+              :threshold="getThreshold(group.date)"
+              @update:threshold="setThreshold(group.date, $event)"
+            />
           </div>
           <div class="space-y-2">
             <div
@@ -946,20 +744,10 @@ onUnmounted(() => {
                   class="text-sm text-muted"
                 >{{ entry.content }}</span>
               </div>
-              <UPopover :open="copiedId === `finalized-${group.date}-${index}`">
-                <UButton
-                  icon="i-lucide-copy"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  @click="copyFinalizedRecord(entry, index)"
-                />
-                <template #content>
-                  <div class="px-2 py-1 text-xs">
-                    Copied!
-                  </div>
-                </template>
-              </UPopover>
+              <CopyButton
+                :copied="copiedId === `finalized-${group.date}-${index}`"
+                @click="copyFinalizedRecord(entry, index)"
+              />
             </div>
           </div>
         </div>
@@ -975,68 +763,15 @@ onUnmounted(() => {
             <h1 class="text-2xl font-bold">
               {{ group.label }}
             </h1>
-            <UPopover :open="copiedId === `day-${group.date}`">
-              <UButton
-                icon="i-lucide-copy"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                @click="copyDayRecords(group)"
-              />
-              <template #content>
-                <div class="px-2 py-1 text-xs">
-                  Copied!
-                </div>
-              </template>
-            </UPopover>
-            <template
-              v-for="(badge, i) in recordBadges(group.date, group.entries)"
-              :key="i"
-            >
-              <UPopover v-if="badge.icon">
-                <UBadge
-                  :color="badge.primary ? 'primary' : 'neutral'"
-                  variant="subtle"
-                  class="cursor-pointer"
-                >
-                  <UIcon
-                    :name="badge.icon"
-                    class="size-3.5"
-                  />
-                  {{ badge.duration }}
-                </UBadge>
-                <template #content>
-                  <div
-                    class="flex items-center gap-1 p-2"
-                    @keydown.stop
-                  >
-                    <USelect
-                      :model-value="getThresholdHours(group.date)"
-                      :items="thresholdHourOptions"
-                      class="w-20"
-                      size="sm"
-                      @update:model-value="setThresholdHours(group.date, $event)"
-                    />
-                    <span class="text-sm font-mono font-bold">:</span>
-                    <USelect
-                      :model-value="getThresholdMinutes(group.date)"
-                      :items="thresholdMinuteOptions"
-                      class="w-20"
-                      size="sm"
-                      @update:model-value="setThresholdMinutes(group.date, $event)"
-                    />
-                  </div>
-                </template>
-              </UPopover>
-              <UBadge
-                v-else
-                color="neutral"
-                variant="subtle"
-              >
-                <template v-if="badge.label">{{ badge.label }}:</template>
-                {{ badge.duration }}
-              </UBadge>
-            </template>
+            <CopyButton
+              :copied="copiedId === `day-${group.date}`"
+              @click="copyDayRecords(group)"
+            />
+            <DayBadges
+              :badges="recordBadges(group.date, group.entries)"
+              :threshold="getThreshold(group.date)"
+              @update:threshold="setThreshold(group.date, $event)"
+            />
           </div>
 
           <VueDraggable
@@ -1093,7 +828,7 @@ onUnmounted(() => {
                       @keydown="handleActiveCategoryKeydown"
                       @focus="editingField = 'category'"
                       @blur="syncDraftsToEntry()"
-                    />
+                    >
                     <span
                       v-if="editingField === 'category' && suggestions.length > 0"
                       class="absolute left-0 pointer-events-none font-semibold text-sm text-muted/40"
@@ -1121,7 +856,7 @@ onUnmounted(() => {
                     @keydown="handleActiveContentKeydown"
                     @focus="editingField = 'content'"
                     @blur="syncDraftsToEntry()"
-                  />
+                  >
                 </template>
                 <template v-else>
                   <div class="flex items-center gap-1">
@@ -1144,20 +879,10 @@ onUnmounted(() => {
                 </template>
               </div>
               <div class="flex items-center gap-0.5">
-                <UPopover :open="copiedId === `record-${index}`">
-                  <UButton
-                    icon="i-lucide-copy"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    @click="copyRecord(entry, index)"
-                  />
-                  <template #content>
-                    <div class="px-2 py-1 text-xs">
-                      Copied!
-                    </div>
-                  </template>
-                </UPopover>
+                <CopyButton
+                  :copied="copiedId === `record-${index}`"
+                  @click="copyRecord(entry, index)"
+                />
                 <UButton
                   v-if="entry.endTime"
                   icon="i-lucide-trash-2"
@@ -1182,7 +907,7 @@ onUnmounted(() => {
             />
           </div>
           <div
-            v-if="isStopped && group === entriesByDate[0] && group.date === currentDateStr()"
+            v-if="isStopped && group === entriesByDate[0] && group.date === today"
             class="flex justify-end mt-2"
           >
             <UButton
